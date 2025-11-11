@@ -1,0 +1,182 @@
+name: Sample Workflow
+
+# This is a sample workflow file demonstrating common GitHub Actions patterns
+# It shows different triggers, jobs, and steps that you can use in your workflows
+
+# Workflow triggers - when should this workflow run?
+on:
+  # Trigger on push to main branch
+  push:
+    branches:
+      - main
+  # Trigger on pull requests targeting main
+  pull_request:
+    branches:
+      - main
+  # Allow manual triggering from Actions tab
+  workflow_dispatch:
+  # Schedule: run at 2:00 AM UTC every day (cron syntax)
+  schedule:
+    - cron: '0 2 * * *'
+
+# Permissions for GITHUB_TOKEN
+permissions:
+  contents: read
+  pull-requests: read
+
+# Environment variables available to all jobs
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Job 1: Build and Test
+  build-and-test:
+    name: Build and Test Application
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Setup Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          npm ci
+          echo "Dependencies installed successfully"
+      
+      # Run linting
+      - name: Run linter
+        run: npm run lint || echo "Linting step completed"
+      
+      # Run tests
+      - name: Run tests
+        run: npm test || echo "Tests completed"
+      
+      # Upload test results as artifacts
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 30
+
+  # Job 2: Code Quality Check
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: Run code quality checks
+        run: |
+          echo "Running code quality analysis..."
+          echo "✓ Code style check passed"
+          echo "✓ Complexity analysis passed"
+          echo "✓ Security scan passed"
+
+  # Job 3: Multi-platform build
+  multi-platform-build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: build-and-test
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [16, 18, 20]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+      - name: Build application
+        run: |
+          echo "Building on ${{ matrix.os }} with Node.js ${{ matrix.node-version }}"
+          echo "Build completed successfully"
+
+  # Job 4: Docker build (conditional)
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        run: |
+          echo "Building Docker image..."
+          echo "Docker image built successfully"
+
+  # Job 5: Deployment (only on main branch)
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-test, code-quality, multi-platform-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    environment:
+      name: production
+      url: https://example.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy application
+        run: |
+          echo "Deploying to production..."
+          echo "Deployment completed successfully"
+      
+      - name: Notify deployment
+        run: |
+          echo "🚀 Deployment successful!"
+          echo "Version: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+
+  # Job 6: Summary and notifications
+  workflow-summary:
+    name: Workflow Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-test, code-quality]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Workflow Summary 📊" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Actor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Job Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Build and Test: ${{ needs.build-and-test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Code Quality: ${{ needs.code-quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Workflow completed!" >> $GITHUB_STEP_SUMMARY
